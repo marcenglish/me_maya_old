@@ -1,0 +1,36 @@
+def returnData():
+	scriptPath = 'C:/Users/Marc/Desktop/Dropbox/meMaya/'
+
+	returnVar = {
+
+	#RIGGING SHELF
+	'meRig':	{
+
+					 'ORDER':			['dev','cometOrient','mirror','weightedJoints','skinningTools','devView','curveBuilder','builderUI'],
+
+					 'builderUI': 		['builderUI','meChar.bmp','from Rig import meBuildTemplate_UI;reload(meBuildTemplate_UI);BLD_UI = meBuildTemplate_UI.UI()','toolApopupCommandA'],
+					 
+					 'curveBuilder': 	['curveBuilder','meCrv.bmp','toolBpopuplabel','toolBpopupCommandA'],
+					 
+					 'devView' : 		['devView','meDevView.bmp','toolCpopuplabel','toolCpopupCommandA'],
+
+					 'skinningTools' : 	['skinningTools','Ctools.bmp','''import maya.mel as mel;mel.eval('source "'''+scriptPath+'''Rig/skinningTools.mel"')''' ,'toolCpopupCommandA'],
+
+					 'weightedJoints' : ['weightedJoints','weightedJoint.png','from Rig import helperSystems_UI;reload(helperSystems_UI);HS_UI = helperSystems.meBuild_UI()' ,'toolCpopupCommandA'],
+
+					 'mirror' : 		['mirror','~split.png','import Rig.Widgets;Rig.Widgets.mirrorAny()','popup'],
+
+					 'cometOrient' : 	['cometOrient','cometJointOrient.bmp','''import maya.mel as mel;mel.eval('source "'''+scriptPath+'''comet/cometJointOrient.mel";cometJointOrient')''' ,'toolCpopupCommandA'],
+
+					 'cometOrient' : 	['cometSave','cometSaveWeights.bmp','''import maya.mel as mel;mel.eval('source "'''+scriptPath+'''comet/cometSaveWeights.mel";cometSaveWeights')''' ,'toolCpopupCommandA'],
+
+					 'dev': 			['dev','dev.bmp','import Dev;reload(Dev)']
+
+					 }
+	
+	#ANIM SHELF
+
+	}
+
+	return returnVar
+print 'shelfContents reloaded'

@@ -1,0 +1,221 @@
+import maya.cmds as m
+import maya.mel as mel
+import os as os
+import meBuildElements
+reload(meBuildElements)
+
+from pymel.core import *
+from functools import partial
+from Rig import meBuildTemplate
+reload(meBuildTemplate)
+
+class UI:    
+      def __init__(self): 
+          
+          if m.window("meBuild", exists = True):
+             m.deleteUI("meBuild")
+          if m.windowPref("meBuild",exists=True):
+             m.windowPref("meBuild",remove =True)
+          
+          self.defaults = meBuildTemplate.buildOptions()
+
+          self.windowWidth = 300
+          self.windowHeight = 550
+          self.connections = []
+         
+          self.window = m.window('meBuild', width= self.windowWidth, height=self.windowHeight,title='Rig Builder Dev', sizeable = True)
+          topCol = m.columnLayout('TOP_COL')
+          
+          #ELEMENT CREATION/EDITING FRAME
+          ceFrame = m.frameLayout('CE_FRM', l= 'Create/Edit Element',mh=5,width = self.windowWidth, height =490,p=topCol)
+          ceTopCol = m.columnLayout('CE_TOP_COL')
+          
+          ceMidCol = m.rowColumnLayout('CE_MID_RCOL',numberOfColumns=2,columnAlign=[(1,'left'),(2,'left')],columnWidth=[(1,self.windowWidth*0.35),(2,self.windowWidth*0.55)])
+
+          m.text(label='  Template Type',h=25)
+          m.optionMenu('TEMPLATE_OPT',l='',w=self.windowWidth*0.55,cc=partial(self.autoComplete))
+          for tt in self.defaults['primaryTemplates']:
+          	m.menuItem(tt)
+
+          m.setParent(ceMidCol)
+
+          m.text(label='  Create Object',h=25)
+          m.optionMenu('CREATE_OPT',l='',w=self.windowWidth*0.55)
+          for bt in self.defaults['build']:
+          	m.menuItem(bt)
+
+          ceLowCol = m.rowColumnLayout('CE_LOW_RCOL',p=ceTopCol,numberOfColumns=3,columnAlign=[(1,'left'),(2,'left'),(3,'left')],columnWidth=[(1,self.windowWidth*0.35),(2,self.windowWidth*0.27),(2,self.windowWidth*0.27),])
+
+          m.text(label='  Number of Joints',h=25)
+          m.intField('NUMJNTS_FLD',w=self.windowWidth*0.27)
+          m.text(label='  ',h=25)
+
+          m.text(label='  ID (Left/Right)',h=25)
+          m.textField('SIDEL_FLD',w=self.windowWidth*0.27)
+          m.textField('SIDER_FLD',w=self.windowWidth*0.27,en=False)
+
+          m.text(label='  Mirror',h=25)
+          m.checkBox('MIRROR_CHK',l='',onc='import maya.cmds as m;m.textField("SIDER_FLD",e=True,en=True)',ofc='import maya.cmds as m;m.textField("SIDER_FLD",e=True,en=False)')
+          
+          m.setParent('CE_TOP_COL')
+          m.button(l='Build Component',w=self.windowWidth*0.99,c=partial(self.buildComponent))
+          m.separator(style='double',height=7)  
+          m.scrollLayout('CONTENTS_SCR',w=self.windowWidth*0.99,h=265)
+
+          m.rowColumnLayout('CONN_RCOL',numberOfColumns=2,p=('CE_TOP_COL'),columnAlign=[(1,'left'),(2,'left')],columnWidth=[(1,self.windowWidth*0.49),(2,self.windowWidth*0.49)])
+          m.text('A',l='',h=4)
+          m.text('B',l='',h=4)
+          m.button('Connect',c=partial(self.connectFromUI))
+          m.button('Disconnect')
+          #ADVANCED FRAME
+          bldFrame = m.frameLayout('BLD_FRM',l= 'Project Settings',mh=6,width = self.windowWidth, cll=True,cl=True,p=topCol,cc=partial(self.fixWindow))
+          bldTopCol = m.rowColumnLayout('BLD_TOP_RCOL',numberOfColumns=2,columnAlign=[(1,'left'),(2,'left')],columnWidth=[(1,self.windowWidth*0.35),(2,self.windowWidth*0.55)])
+
+          m.text('  Job Name:',h=25)
+          m.optionMenu('JOB_OPT',l='',w=self.windowWidth*0.55)
+
+          m.setParent(bldTopCol)
+          m.text('  Char Name:',h=25)
+          m.optionMenu('CHAR_OPT',l='',w=self.windowWidth*0.55)
+
+          m.setParent(bldTopCol)
+          m.text('  Variation:',h=25)
+          m.optionMenu('VAR_OPT',l='',w=self.windowWidth*0.55)
+
+          m.setParent(bldTopCol)
+          m.text('  Resolution:',h=25)
+          m.optionMenu('RES_OPT',l='',w=self.windowWidth*0.55)
+
+          m.setParent(bldTopCol)
+          m.text('  Export Template:',h=25)
+          m.checkBox('TEMPL_CHK')
+
+          m.text('  Export Skeleton:',h=25)
+          m.checkBox('SKEL_CHK')
+
+          m.text('  Build Rig:',h=25)
+          m.checkBox('BLD_CHK',v=1)
+          
+          m.setParent(topCol)
+          m.button(l='Build Rig!',w=self.windowWidth,h=40,c=partial(self.buildAll))
+
+          m.showWindow(self.window)
+
+      def fixWindow(self,*args):      	
+      	m.window(self.window, e=True, height=self.windowHeight)
+
+
+      def buildAll(self,*args):
+        meBuildTemplate.convertToSkel()
+        #build rig if specified
+
+        if m.checkBox('BLD_CHK',q=True,v=True):
+          meBuildElements.meNewBuild(self.connections)
+
+      def buildComponent(self,*args):
+        #Get UI Data
+      	name = m.optionMenu('CREATE_OPT',q=True,v=True)
+      	templateType = m.optionMenu('TEMPLATE_OPT',q=True,v=True)
+      	number = int(m.intField('NUMJNTS_FLD',q=True,v=True))
+        
+        if number != 0:      	
+          if m.textField('SIDER_FLD',q=True,en=True):
+            extraID = [m.textField('SIDEL_FLD',q=True,tx=True),m.textField('SIDER_FLD',q=True,tx=True)]
+          else:
+            extraID = [m.textField('SIDEL_FLD',q=True,tx=True)]
+          
+          #test for conflict with existing objects - this part's kind of screwy as I seemed to have given opposide defenitions for 
+          #'name' and 'type' in the UI
+          clashing = False
+          for obj in meBuildTemplate.rigObj.objDict:
+            obj = obj['obj']
+            if name == obj.type:
+              if templateType == obj.name:
+                if extraID[0] == obj.sides[0]:
+                  clashing = True
+
+          if clashing:
+            m.confirmDialog(title='Objects clashing!', message='This object clashes with another already in the list.\nPlease give it an extra identifier to differentiate it.',button=['ok'])
+          
+          else:
+            if 'defaultRoll' in self.defaults['template'][templateType]:
+            	roll = self.defaults['template'][templateType]['defaultRoll']
+            else:
+            	roll = False
+
+            inBtwn = number-2
+
+            tempObj = meBuildTemplate.rigObj(templateType,name,roll=roll,inBtwn=inBtwn,mirror=extraID)
+            tempObj.build()
+
+            self.updateSceneContents()
+
+
+      def autoComplete(self,*args):
+      	'''This section attemps to complete the extra fields.  They are still modifiable, but populated with more likely settings.'''
+      	
+      	rigObj = m.optionMenu('CREATE_OPT',q=True,v=True)
+      	templateType = m.optionMenu('TEMPLATE_OPT',q=True,v=True)
+
+      	if templateType in self.defaults['commonSymmetricals']:
+      		extraID = self.defaults['sideIds']
+      		m.textField('SIDEL_FLD',e=True,tx=extraID[0])
+      		m.textField('SIDER_FLD',e=True,tx=extraID[1],en=True)
+      		m.checkBox('MIRROR_CHK',e=True,v=1)
+      	else:
+      		m.textField('SIDEL_FLD',e=True,tx='')
+      		m.textField('SIDER_FLD',e=True,tx='',en=False)
+      		m.checkBox('MIRROR_CHK',e=True,v=0)
+
+      	m.optionMenu('CREATE_OPT',e=True,v=self.defaults['template'][templateType]['defaultType'])
+      	m.intField('NUMJNTS_FLD',e=True,v=self.defaults['template'][templateType]['defaultLength'][0],ed=self.defaults['template'][templateType]['defaultLength'][1])
+
+      def connectFromUI(self,*args):
+      	meBuildTemplate.connectRigs('Manual')
+      	self.updateSceneContents()
+
+
+      def deleteFromUI(self,obj,UIid,id,*args):
+      	m.delete(obj.group)
+      	del meBuildTemplate.rigObj.objDict[id]
+
+      	self.updateSceneContents()
+
+
+      def updateSceneContents(self,*args):
+      	'''Updates the contents of the scroll layout to match the contents of meBuildTemplate.rigObj.objDict'''
+
+      	scrollWidth = self.windowWidth*0.99
+
+      	if m.scrollLayout('CONTENTS_SCR',q=True,ca=True):
+      		for ea in m.scrollLayout('CONTENTS_SCR',q=True,ca=True):
+      			print m.scrollLayout('CONTENTS_SCR',q=True,ca=True)
+      			m.deleteUI(ea)
+
+        self.connections = []
+      	for i in range(len(meBuildTemplate.rigObj.objDict)):
+          connectedToObject = False
+
+          m.columnLayout('CONTENTS_'+str(i)+'_TOP_COL',p='CONTENTS_SCR')
+          m.rowColumnLayout('CONTENTS_'+str(i)+'_TOP_RCOL',numberOfColumns=2,columnAlign=[(1,'left'),(2,'left')],columnWidth=[(1,scrollWidth*0.75),(2,scrollWidth*0.15)], p='CONTENTS_'+str(i)+'_TOP_COL')
+          m.rowColumnLayout('CONTENTS_'+str(i)+'_RCOL',numberOfColumns=2,columnAlign=[(1,'left'),(2,'left')],columnWidth=[(1,scrollWidth*0.3),(2,scrollWidth*0.5)], p='CONTENTS_'+str(i)+'_TOP_RCOL')
+          m.text('  Template: ')
+          m.text('temp',l=meBuildTemplate.rigObj.objDict[i]['name'])
+          m.text('  Type: ')
+          m.text('type',l=meBuildTemplate.rigObj.objDict[i]['obj'].type)
+          m.text('  Mirrored: ')
+          m.text('mirr',l=meBuildTemplate.rigObj.objDict[i]['obj'].mirrored)
+          m.text('  Connected To: ')
+          m.text('conn',l=str(meBuildTemplate.rigObj.objDict[i]['obj'].connectedTo))
+          m.text('  Extra ID(s): ')
+          m.text('extraId',l=str(meBuildTemplate.rigObj.objDict[i]['obj'].sides))
+
+          if meBuildTemplate.rigObj.objDict[i]['obj'].connectedTo:
+            connectedToObject = meBuildTemplate.getFromItem(meBuildTemplate.rigObj.objDict[i]['obj'].connectedTo,type='obj')
+
+          m.button(l='Delete',p='CONTENTS_'+str(i)+'_TOP_RCOL',bgc=(0.25,0,0),c=partial(self.deleteFromUI,meBuildTemplate.rigObj.objDict[i]['obj'],i,meBuildTemplate.rigObj.objDict[i]['obj'].id))
+
+          m.separator(style='double',p='CONTENTS_'+str(i)+'_TOP_RCOL')
+          m.separator(style='double',p='CONTENTS_'+str(i)+'_TOP_RCOL')
+
+          self.connections.append([meBuildTemplate.rigObj.objDict[i]['obj'].connectedTo,meBuildTemplate.rigObj.objDict[i]['obj'],connectedToObject])

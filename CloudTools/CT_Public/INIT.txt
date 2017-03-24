@@ -1,0 +1,1 @@
+Do not move this file, it is used to get the user-specific file path for CloudTools.

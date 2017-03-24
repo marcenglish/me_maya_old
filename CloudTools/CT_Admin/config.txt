@@ -1,0 +1,30 @@
+#Dev mode switch.  If true, the scripts will look for 'CloudTools_Dev' instead of 'CloudTools'.  
+#
+#
+
+#Make sure the admin's username is listed here, and that they have read and write access to CT_Admin.
+admin=idoun
+
+
+#List of all projects currently being used with CloudTools.  Projects should be getting added automatically when
+#using the projectSetup tool.
+projects=,LaborBoard_SHOW,ba_PROJ,TrevPitch_SHOW,
+
+
+#Use these lists to manage selectable roles for scene setup.
+assetRoles=Geo,Rig,Tex,Skn
+shotRoles=Anim
+geoRoles=Anim,FX
+renderRoles=Lit,FX
+
+
+
+#The lists below designate the tools to appear in the CloudTools shelf, based on the specified role.
+AdminTools=projectSetup,
+AnimTools=curveVis,curveAll,graphEditor,swapLR,switchSpace,sceneEdit
+RigTools=importBaseSkel,
+TexTools=
+GeoTools=
+SknTools=importBaseSkel,
+LitTools=
+FXTools=

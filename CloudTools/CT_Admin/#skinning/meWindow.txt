@@ -1,0 +1,9 @@
+proc _meAnimControlUI(){
+    string $windowName = "meAnimControl";
+    string $windowTitle = "meAnimControl v 1.0.2";
+    string $bList[];
+    int $ctr;
+    if(`window -exists $windowName`)
+        deleteUI $windowName;
+    if(`windowPref -exists $windowName`)
+        windowPref -remove $windowName;

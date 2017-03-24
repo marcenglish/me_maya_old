@@ -1,0 +1,175 @@
+//Animation Window
+
+//Mute All Procedure
+global proc _meMuteAll(string $muteSet, string $side, string $switch)
+{
+    string $activeSet[] = _meSetList ($muteSet);
+    for ($ea in $activeSet)
+    {
+    _meToggle ($ea, $switch,$side);
+    }
+}
+
+//SETLISTS PROCEDURE --------------------------------------------------------------------------------------
+/*
+global proc string[] _meSetList (string $parts)
+{
+string $bList[] = `ls -sl`;
+        return $bList;
+}
+
+*/
+//UPDATE PROCEDURE --------------------------------------------------------------------------------------
+global proc _meUpdate(string $button, string $part, string $side)
+{
+
+    $testOne = (`listConnections -d 0 ($button)`);
+    $testResult = stringArrayToString (($testOne), " ");
+    int $statusPeg = (`gmatch $testResult "*rotate*"` + `gmatch $testResult "*mute*"`);
+    switch ($statusPeg)
+        {
+        case 0:
+            button -e -bgc .5 .5 .5 -c ("_meToggle(\""+$button+"\", "+$statusPeg+",\""+$side+"\")") -aop 1 $button ;
+            break;
+        case 1:
+            button -e -bgc 0 1 0 -c ("_meToggle(\""+$button+"\", "+$statusPeg+",\""+$side+"\")") -aop 1 $button ;
+            break;
+        case 2:
+            button -e -bgc 1 0 0 -c ("_meToggle(\""+$button+"\", "+$statusPeg+",\""+$side+"\")") -aop 1 $button ;
+            break;
+        }
+}
+
+//UPDATE SET --------------------------------------------------------------------------------------
+/*global proc _meUpdateSet (string $set)
+{
+string $bList[] = `_meSetList ($set)`;
+string  $side= `_meGetLR ($set)`;
+
+for ($ea in $bList)
+    {
+
+    _meUpdate ($ea,$set,$side);
+    button -e -en 0 $ea;
+    button -e -en 1 -aop 0 $ea;
+    }
+} */
+
+//TOGGLE PROCEDURE --------------------------------------------------------------------------------------
+global proc _meToggle(string $toggleName, int $peg, string $LR)
+{
+switch ($peg)
+    {
+    case 0:
+        print ($peg+"not animated"+"\n");
+        break;
+    case 1:
+        print ($toggleName+" mute ON"+"\n");
+        mute ($toggleName);
+        $peg = 2;
+        button -e -bgc 1 0 0 -c ("_meToggle(\""+$toggleName+"\", "+$peg+",\""+$LR+"\")") -aop 1 $toggleName;
+        button -e -en 0 $toggleName;
+        button -e -en 1 -bgc 1 0 0 $toggleName;
+        break;
+    case 2:
+        print ($toggleName+$LR+" mute OFF"+"\n");
+        mute -d -f ($toggleName);
+        $peg = 1;
+        button -e -bgc 0 1 0 -c ("_meToggle(\""+$toggleName+"\", "+$peg+",\""+$LR+"\")") -aop 1 $toggleName;
+        button -e -en 0 $toggleName;
+        button -e -en 1 -bgc 0 1 0 $toggleName;
+        break;
+    }
+}
+
+//build main window====================================================
+proc _meAnimControlUI(){
+    string $windowName = "meAnimControl";
+    string $windowTitle = "meAnimControl v 1.0.2";
+    string $bList[];
+    int $ctr;
+    if(`window -exists $windowName`)
+        deleteUI $windowName;
+    if(`windowPref -exists $windowName`)
+        windowPref -remove $windowName;
+
+window
+    -title $windowTitle
+    -mb 1
+    -te 164
+    -le 1000
+     $windowName;
+
+    menu -l "Edit";
+        setParent -m ..;
+
+string $masterForm = `columnLayout -adj 1`;
+
+//loop this section to create multiple parts
+string $rollJoints[] = `ls -typ joint "IF_shoulder_L_Roll*"`;
+int $rCount = size ($rollJoints);
+print ("rCount is "+$rCount);
+int $init = 0;
+//for($part in $parts){
+//    string $bList[] = `_meSetList ($part)`;
+        string $partForm = `formLayout`;
+        string $controls = `formLayout`;
+//            string $frame = `frameLayout -label $part  -collapsable true $part`;
+                columnLayout -adj 1 ctrlCol;
+                    string $radio = `radioButtonGrp -sl 1 -onc ("_meUpdateSet (\""+$part+"\")") -adj 1 -numberOfRadioButtons 2  -labelArray2 "L" "R" ($part+"Rad")`;
+                    for($each in $bList){
+                        button -c ("string  $LR= `_meGetLR (\""+$part+"\")`; _meUpdate(\""+$each+"\", \""+$part+"\",$LR)") $each;
+                        _meUpdate($each, $part, $LR);
+                        }
+                if($part == "Arms" || $part == "Legs"){
+                    button  -c ("string $LR= `_meGetLR (\""+$part+"\")`; _meMuteRolls (\""+$part+"\",\""+$LR+"\",0,\""+$rCount+"\")") ($part+"RollJ");
+
+                $init = 1;
+                }
+                    setParent ..;
+                setParent ..;
+            setParent ..;
+        string $muteForm = `formLayout`;
+            string $muteA = `button -l "Mute ALL" -c ("string  $LR= `_meGetLR (\""+$part+"\")`; _meMuteAll(\""+$part+"\",$LR,1)") muteAll`;
+            string $muteO = `button -l "Mute Off" -c ("string  $LR= `_meGetLR (\""+$part+"\")`; _meMuteAll(\""+$part+"\",$LR,2)") muteOff`;
+            setParent .. ;
+        setParent ..;
+
+    formLayout -e
+        -af $controls "top" 5
+        -af $controls "left" 0
+        -af $controls "right" 0
+        -an $controls "bottom"
+
+        -ac $muteForm "top" 0 $controls
+        -af $muteForm "left" 0
+        -af $muteForm "right" 0
+        -an $muteForm "bottom"
+        $partForm;
+
+    formLayout -e
+        -af $frame "top" 0
+        -af $frame "left" 0
+        -af $frame "right" 0
+        -an $frame "bottom"
+        $controls;
+
+    formLayout -e
+        -af $muteA "top" 0
+        -af $muteA "left" 0
+        -ap $muteA "right" 0 50
+        -an $muteA "bottom"
+
+        -af $muteO "top" 0
+        -ac $muteO "left" 0 $muteA
+        -af $muteO "right" 0
+        -an $muteO "bottom"
+        $muteForm;
+    //}
+    string $update = `button  -l "Update"  updateUI`;
+    setParent ..;
+
+showWindow;
+}
+string $testList[] = {"Arms", "Legs", "Torso", "Head"};
+_meAnimControlUI ($testList);

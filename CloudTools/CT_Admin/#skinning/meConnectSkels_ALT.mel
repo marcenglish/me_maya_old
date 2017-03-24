@@ -1,0 +1,24 @@
+//meMatch Skel - select source, and then dest skel
+
+//get both skel prefixes
+
+{
+string $sel[]  = {"ankle_L","ankle_R","ball_L","ball_R","elbow_L","elbow_L_Roll_0","elbow_L_Roll_1","elbow_L_Roll_2","elbow_L_Roll_3","elbow_L_Roll_end","elbow_L_Roll_start","elbow_L_bend","elbow_R","elbow_R_Roll_0","elbow_R_Roll_1","elbow_R_Roll_2","elbow_R_Roll_3","elbow_R_Roll_end","elbow_R_Roll_start","elbow_R_bend","heel_L","heel_R","hip_L","hip_L_Roll_0","hip_L_Roll_1","hip_L_Roll_2","hip_L_Roll_3","hip_L_Roll_end","hip_L_Roll_start","hip_L_bend","hip_R","hip_R_Roll_0","hip_R_Roll_1","hip_R_Roll_2","hip_R_Roll_3","hip_R_Roll_end","hip_R_Roll_start","hip_R_bend","knee_L","knee_L_Roll_0","knee_L_Roll_1","knee_L_Roll_2","knee_L_Roll_3","knee_L_Roll_end","knee_L_Roll_start","knee_L_bend","knee_R","knee_R_Roll_0","knee_R_Roll_1","knee_R_Roll_2","knee_R_Roll_3","knee_R_Roll_end","knee_R_Roll_start","knee_R_bend","shoulder_L","shoulder_L_Roll_0","shoulder_L_Roll_1","shoulder_L_Roll_2","shoulder_L_Roll_3","shoulder_L_Roll_end","shoulder_L_Roll_start","shoulder_L_bend","shoulder_R","shoulder_R_Roll_0","shoulder_R_Roll_1","shoulder_R_Roll_2","shoulder_R_Roll_3","shoulder_R_Roll_end","shoulder_R_Roll_start","shoulder_R_bend","toe_L","toe_R","wrist_L","wrist_R"};
+string $fingers[] = {"index","thumb","middle","ring","pinky"};
+string $ids[] = {"_L","_R"};
+string $prefix = "Rig_";
+string $prefixB = "base_";
+for ($ea in $sel){
+  print ($ea+"\n");
+  if (`objExists ($prefixB+$ea)`){
+  parentConstraint -mo  ($prefix+$ea)   ($prefixB+$ea) ;
+  }
+  }
+for ($id in $ids){
+for ($ea in $fingers){
+for ($i = 0; $i< 4; $i++){
+parentConstraint  ($prefix+$ea+"_"+$i+$id) ($prefixB+$ea+"_"+$i+$id)   ;
+}
+}
+}
+}

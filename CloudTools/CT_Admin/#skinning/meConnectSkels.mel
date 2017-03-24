@@ -1,0 +1,26 @@
+//meMatch Skel - select source, and then dest skel
+
+//get both skel prefixes
+{
+string $sel[]  = `ls -sl`;
+select -hi $sel[0];
+string $joints[] =`ls -sl`;
+string $prefix= "";
+string $prefixB = `substitute $sel[0] $sel[1] ""`;
+for ($ea in $joints){
+if (`gmatch $ea "base_*"`){
+if (`nodeType $ea` == "joint"){
+string $IF = `substitute "base_" $ea "IF_"`;
+connectAttr ($ea+".tx")   ($IF+".tx") ;
+connectAttr ($ea+".ty")   ($IF+".ty") ;
+connectAttr ($ea+".tz")   ($IF+".tz") ;
+connectAttr ($ea+".rx")   ($IF+".rx") ;
+connectAttr ($ea+".ry")   ($IF+".ry") ;
+connectAttr ($ea+".rz")   ($IF+".rz") ;
+connectAttr ($ea+".sx")   ($IF+".sx") ;
+connectAttr ($ea+".sy")   ($IF+".sy") ;
+connectAttr ($ea+".sz")   ($IF+".sz") ;
+}}
+print ("prefix is "+$prefix);
+}
+}

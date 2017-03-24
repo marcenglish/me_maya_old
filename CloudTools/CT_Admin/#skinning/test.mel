@@ -1,0 +1,11 @@
+//build weighted joints
+{
+string $sel[] = `ls -sl`;
+for ($ea in $sel){
+select $ea;
+joint -n ($ea+"Weighted");
+setAttr ($ea+"Weighted.radius") (`getAttr $ea ($ea+".radius")` * 2);
+string $child[] = `listRelatives -ch $ea`;
+print $child[0];
+}
+}

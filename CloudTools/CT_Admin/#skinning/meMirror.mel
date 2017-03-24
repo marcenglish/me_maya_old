@@ -1,0 +1,18 @@
+{
+string $sel[] = `ls -sl`;
+for ($ea in $sel)
+{
+$t = `xform -q -t $ea`;
+$side = `substitute "_L" $ea "_R"`;
+setAttr ($side+".t") ($t[0]*-1) ($t[1]*-1) ($t[2]*-1);
+$r = `xform -q -ro $ea`;
+setAttr ($side+".r") ($r[0]*-1) $r[1] ($r[2]*-1);
+$jo = `getAttr ($ea+".jointOrient")`;
+setAttr ($side+".jointOrient") ($jo[0]*-1) $jo[1] ($jo[2]*-1);
+$rad =`getAttr ($ea+".radius")`;
+setAttr ($side+".radius") $rad;
+}
+
+
+
+}

@@ -1,0 +1,1 @@
+print 'Rigging shelf setup'

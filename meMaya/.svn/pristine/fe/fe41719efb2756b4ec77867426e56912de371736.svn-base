@@ -1,0 +1,845 @@
+import maya.cmds as m
+import meTools
+reload (meTools)
+
+#TBD: add functionality for dynamic naming conventions
+
+
+def buildShaders():
+	print 'build shaders for all comonents'
+	colors = {'red':[1,0,0],'blue':[0,0,1],'green':[0,1,0],'orange':[1,0.5,0],'teal':[0.5,0.75,0.75],'lightBlue':[0,0.5,1]}
+
+	for color in colors.keys():
+		if not m.objExists('template_'+color):
+			#create a shader
+			shader=m.shadingNode("lambert",asShader=True,n='template_'+color)
+			# a shading group
+			shading_group= m.sets(n='template_'+color+'_SG',renderable=True,noSurfaceShader=True,empty=True)
+			#connect shader to sg surface shader
+			m.connectAttr('%s.outColor' %shader ,'%s.surfaceShader' %shading_group)
+			#set color
+			m.setAttr(shader+'.color',colors[color][0],colors[color][1],colors[color][2],type='double3')
+
+class rigObj():
+	'''docstring for rigObj'''
+	objDict = {}
+	buildShaders()
+	SE_panel = ''
+	for panel in m.lsUI(p=True):
+	    if 'script' in panel:
+	        SE_panel = panel
+
+	def __init__(self, name,objType,**kwargs):
+		self.name = name
+		self.type = objType
+		self.runOnce = False
+		self.shapes = []
+		self.sides = ['']
+		self.id = len(rigObj.objDict.keys())
+		self.primary = []
+		self.connectedTo = False
+		self.keepRoot = True
+		self.connSurfaces = []
+
+		rigObj.objDict[self.id] = {}
+		rigObj.objDict[self.id]['name'] = name
+		rigObj.objDict[self.id]['obj'] = self
+
+
+
+		if kwargs:	
+			self.extraInfo = kwargs
+		else:
+			self.extraInfo = {}
+
+	def root(self,*args):
+		#build the microrig
+		self.i = str(self.getIncrement(self.type+'_grp'))
+
+		#an extra underscore is added at the end of the string to prevent confusion caused by name conflict- 
+		#related incrementation in maya.
+		self.group = self.type+'_grp_'+str(self.i)+'_'		
+					
+		#build the setup root objects
+		meTools.makeCtrl(name=self.group,shape='box',color='red',vis=True,lockType='%s')
+		m.addAttr(ln='objectScale',at='double',min=0.01,max=2,dv=1,k=True)
+		m.createNode('multiplyDivide',n=self.group+'_MD')
+		m.connectAttr(self.group+'.objectScale',self.group+'_MD.input1X')
+		m.setAttr(self.group+'_MD.input2X',0.4)
+
+		self.upLoc = m.spaceLocator(n=self.type+'_upLoc_'+str(self.i)+'_')[0]
+		m.setAttr(self.upLoc+'.ty',5)
+		m.setAttr(self.upLoc+'.overrideEnabled',True)
+		m.setAttr(self.upLoc+'.overrideDisplayType',2)
+		m.parent(self.upLoc,self.type+'_grp_'+str(self.i)+'_')
+
+	def build(self,*args):
+		self.composite = False
+		if self.runOnce: 
+			print 'This object already has a rig.  If you want to build another rig, instantiate another rigObj.'
+		
+		else:
+			
+			self.root()			
+			
+			self.baseShapes()
+			
+			self.rigSetup()
+			
+			if 'mirror' in self.extraInfo:
+				if self.extraInfo['mirror']:
+					self.sides = self.extraInfo['mirror']
+					self.mirrorRig()
+
+			m.select(self.group)
+
+			self.runOnce = True
+			
+	def buildComplex(self,*args):
+		self.composite = True
+		self.subRigs = {}
+		self.root()
+			
+		self.baseShapes()			
+
+		mirror = False
+		if 'mirror' in self.extraInfo:
+				if self.extraInfo['mirror']:
+					mirror = True					
+					self.sides = self.extraInfo['mirror']
+					self.mirrorRig()
+
+		
+		if self.type == 'hand':
+			self.fingerData = {}
+			fingers = ['thumb','index','middle','ring','pinky']
+
+			if self.extraInfo:
+				if 'fingers' in self.extraInfo:
+					fingers = self.extraInfo['fingers']
+			
+			i=0
+			for finger in fingers:
+
+				#build and position metacarpals
+				self.fingerData[finger] = {}
+
+				self.fingerData[finger]['meta'] =  rigObj('Metacarpal','IKFK_single',procedural=finger,parent=self)		
+				self.fingerData[finger]['meta'].build()
+
+				zOffset = (float(i)/len(fingers))*len(fingers)-(len(fingers)*0.5)
+				
+				m.move(3,0,zOffset,self.fingerData[finger]['meta'].group)
+				m.move(5,self.fingerData[finger]['meta'].shapes[1],x=True)				
+				
+				connectRigs(True,[self.shapes[1],self.fingerData[finger]['meta'].shapes[1]])
+
+				if mirror:
+					self.fingerData[finger]['meta'].sides = self.extraInfo['mirror']
+					self.fingerData[finger]['meta'].mirrorRig(parent=self)
+					self.fingerData[finger]['meta'].mirror = self.extraInfo['mirror']
+
+				#build and position phalanges
+				self.fingerData[finger]['phal'] = rigObj('Phalange','IKFK_hinge',inBtwn=2,procedural=finger,parent=self)
+				self.fingerData[finger]['phal'].build()
+				
+				m.rotate(90,self.fingerData[finger]['phal'].group,x=True)
+				
+				connectRigs(False,[self.fingerData[finger]['meta'].shapes[1],self.fingerData[finger]['phal'].shapes[1]])
+
+
+				if mirror:
+					self.fingerData[finger]['phal'].sides = self.extraInfo['mirror']
+					self.fingerData[finger]['phal'].mirrorRig(parent=self)
+
+
+				i+=1
+
+
+		self.runOnce = True
+
+
+	def baseShapes(self,*args):
+		
+		name = self.type+'_'+self.i+'_'
+
+		if self.type == 'IKFK_hinge':
+			self.component('sphere',color='red',name=name+'Start')
+			self.component('sphere',color='red',pos=[10,0,0],name=name+'End')
+
+		if self.type == 'IKFK_spline':
+			self.component('sphere',color='red',name=name+'Start')
+			self.component('sphere',color='red',pos=[10,0,0],name=name+'End')
+
+		if self.type == 'IKFK_single':
+			self.component('sphere',color='red',name=name+'Start')
+			self.component('sphere',color='red',pos=[10,0,0],name=name+'End')
+
+		if self.type == 'INV_foot':
+			self.component('sphere',color='red',name=name+'Start')
+			self.component('sphere',color='red',pos=[4,0,4],name=name+'End',lock='tx')
+			
+
+		if self.type == 'hand':
+			self.component('sphere',color='red',name=name+'Start')
+			self.component('sphere',color='red',pos=[1,0,0],name=name+'End')
+		
+		for shape in self.shapes:
+			if '_Space' in shape:
+				m.parent(shape+'_Space',self.group)
+			else:
+				m.parent(shape,self.group)
+
+		m.parent(self.upLoc,name+'Start')
+
+	def rigSetup(self,*args):
+
+		connectSets = []
+		name = self.type+'_'+self.i+'_'
+
+		if 'IKFK' in self.type:
+			
+
+			if self.type == 'IKFK_hinge':	
+
+				if 'inBtwn' in self.extraInfo:
+					btwn = self.extraInfo['inBtwn']
+				else:
+					btwn = 1
+
+				
+				for i in range(btwn):
+					stri = str(i)
+					
+					#build inBetween spheres
+					comp = self.component('sphere',color='orange',pos=[5,0,-2],ps=True,i=stri,lock='ty',ib=i+1)
+					m.parent(name+stri+'__Space',name+'Start')
+
+					#orient base to follow tip
+					m.aimConstraint(name+'End',name+'Start',aimVector=[1,0,0],upVector=[0,0,-1],worldUpType='objectRotation',wu=[0,0,-1],wuo=self.group)
+					
+					#determine constraint weight blend for each position
+					constrWeight = (i+1)/(btwn+1.0)
+					constr = m.pointConstraint(name+'Start',name+stri+'__Space')
+					m.setAttr(constr[0]+'.'+name+'StartW0',1-constrWeight)
+					contrs = m.pointConstraint(name+'End',name+stri+'__Space')
+					m.setAttr(constr[0]+'.'+name+'EndW1',constrWeight)
+
+					#offset in between
+					m.setAttr(name+stri+'_.tz',-5)
+
+					#Add info to connectSets list
+					if i == 0:
+						connectSets.append([name+'Start',comp])
+					
+					if i == btwn-1:
+						connectSets.append([comp,name+'End'])
+					
+					if i != btwn and i != 0:
+						connectSets.append([previous,comp])
+
+					previous = comp
+
+
+			if self.type == 'IKFK_spline':
+
+				if self.extraInfo:
+					xIncr = 10.0/(self.extraInfo['inBtwn']+1)
+					iIncr = xIncr
+
+					for i in range(self.extraInfo['inBtwn']):
+						comp = self.component('sphere',color='orange',parent=self.type+'_'+self.i+'_Start',ps=True,i=str(i),lock='ty',ib=i+1)
+
+						constrWeight = (i+1)/(self.extraInfo['inBtwn']+1.0)
+						constr = m.pointConstraint(name+'Start',comp+'_Space')
+						m.setAttr(constr[0]+'.'+name+'StartW0',1-constrWeight)
+						constr = m.pointConstraint(name+'End',comp+'_Space')
+						m.setAttr(constr[0]+'.'+name+'EndW1',constrWeight)
+						
+
+						if i == 0:
+							connectSets.append([name+'Start',comp])
+						if i == self.extraInfo['inBtwn']-1:
+							connectSets.append([comp,name+'End'])
+						if 0 < i < self.extraInfo['inBtwn']:
+							connectSets.append([previous,comp])
+						previous = comp
+
+						iIncr += xIncr
+				
+				m.aimConstraint(name+'End',name+'Start',aimVector=[1,0,0],upVector=[0,0,-1],worldUpType='objectRotation',wu=[0,0,-1],wuo=self.group)
+
+			if self.type == 'IKFK_single':
+				connectSets.append([name+'Start',name+'End'])
+
+		elif self.type == 'INV_foot':
+			compA = self.component('sphere',color='orange',parent=self.type+'_'+self.i+'_Start',pos=[4,0,-2],i=0,lock='ty',ib=1)
+			compB = self.component('sphere',color='orange',parent=self.type+'_'+self.i+'_Start',pos=[4,0,1],i=1,lock='ty',ib=2)
+
+			connectSets = ([name+'Start',compA],[compA,compB],[compB,name+'End'])
+
+		else:
+			connectSets.append(self.shapes)
+		
+		self.connectComponents(self,connectSets)
+
+		# if self.type == 'INV_foot':
+		# 	m.setAttr(self.group+'.rz',-90)
+
+	@staticmethod
+	def connectComponents(self,targetSets,*args):
+		for ts in targetSets:
+			startPos = m.xform(ts[0],q=True,t=True,ws=True)
+			endPos = m.xform(ts[1],q=True,t=True,ws=True)
+			curve = ts[0]+'_'+ts[1]+'_connCurve'
+			m.curve(d=1,p=[startPos,endPos],k=[0,1],n=curve)
+			m.select(ts[0])
+			m.joint(n=ts[0]+'_'+ts[1]+'_startJnt')
+			m.select(ts[1])
+			m.joint(n=ts[0]+'_'+ts[1]+'_endJnt')
+			m.skinCluster(ts[0]+'_'+ts[1]+'_startJnt',ts[0]+'_'+ts[1]+'_endJnt',curve,tsb=True)
+			
+			circle = m.circle(n=ts[0]+'_'+ts[1]+'_cc_profile',r=0.25)		
+			
+			if self == '':
+				srcObj = getFromItem(ts[0],type='obj')
+				m.connectAttr(srcObj.group+'_MD.outputX',circle[1]+'.radius')
+			else:
+				m.connectAttr(self.group+'_MD.outputX',circle[1]+'.radius')
+			circle = circle[0]
+			
+			m.aimConstraint(ts[1],ts[0]+'_'+ts[1]+'_cc_profile',aimVector=[0,0,-1],upVector=[0,0,-1],worldUpType='objectRotation',wu=[0,0,-1],wuo=ts[0])
+			
+			m.parent(ts[0]+'_'+ts[1]+'_cc_profile',ts[0],r=True)
+
+			m.hide(ts[0]+'_'+ts[1]+'_startJnt',ts[0]+'_'+ts[1]+'_endJnt',circle,curve)
+
+			m.setAttr(curve+'.inheritsTransform',0)
+			
+			surf = m.extrude (ts[0]+'_'+ts[1]+'_cc_profile', curve,n=ts[0]+'_'+ts[1]+'_EXTR',et=2,ucp=0)[0]			
+			
+
+			
+			m.setAttr(surf+'.inheritsTransform',0)
+			m.setAttr(surf+'.overrideEnabled',1)
+			m.setAttr(surf+'.overrideDisplayType',2)
+			
+			if self == '':
+				m.sets(surf, e=True, forceElement='template_lightBlue_SG')
+			else:
+				m.sets(surf, e=True, forceElement='template_blue_SG')
+
+			if self != '':
+				group = self.group
+				self.connSurfaces.append(surf)
+			else:
+				group = ts[1]
+
+			
+			m.parent(curve,surf,group)			
+			m.setAttr(surf+'.t',0,0,0)
+			m.setAttr(surf+'.r',0,0,0)
+			m.select(cl=True)
+
+
+
+		#add roll joint indicators if required:		
+		k = 1
+		if self != '':
+			previous = ''
+			if self.extraInfo:
+				if 'roll' in self.extraInfo:
+					for i in range(len(targetSets)):						
+						for j in range(self.extraInfo['roll']):							
+							comp = self.component('disc',color='orange',parent=targetSets[i][0],i=i,iSub=j,lock='all',ib=k,secondary=True)
+							if j == 0:
+								m.aimConstraint(targetSets[i][1],comp,aimVector=[1,0,0],upVector=[0,0,-1],worldUpType='objectRotation',wu=[0,0,-1],wuo=targetSets[i][0])
+							else:
+								m.connectAttr(previous+'.r',comp+'.r')
+							previous = comp
+
+							#determine constraint weight blend for each position
+							constrWeight = (j+1)/(self.extraInfo['roll']+1.0)
+							constr = m.pointConstraint(targetSets[i][0],comp)
+							m.setAttr(constr[0]+'.'+targetSets[i][0]+'W0',1-constrWeight)
+							contrs = m.pointConstraint(targetSets[i][1],comp)
+							m.setAttr(constr[0]+'.'+targetSets[i][1]+'W1',constrWeight)
+							k+=1
+						k+=1
+
+		return surf
+
+
+	
+	def mirrorRig(self,**kwargs):
+		shadeMe = {}
+		if not kwargs:
+			kwargs = []
+		
+		if 'parent' in kwargs:
+			mirrorGroup = kwargs['parent'].group+'mirror'
+		else:
+			if not m.objExists(self.group+'mirror'):
+				mirrorGroup = m.group(em=True,n=self.group+'mirror')
+				m.parent(mirrorGroup,self.group)
+				m.setAttr(mirrorGroup+'.sx',-1)
+				m.setAttr(mirrorGroup+'.inheritsTransform',0)
+			else:
+				mirrorGroup = self.group+'mirror'
+
+		
+		if 'connection' in kwargs:
+			allShapes = [kwargs['connection']]
+		else:
+			allShapes = self.shapes + self.connSurfaces
+
+		for shape in allShapes:	
+			type = m.nodeType(shape+'Shape')
+			m.createNode(type,n=shape+'_mirrorShape')
+			m.rename(m.listRelatives(shape+'_mirrorShape',p=True)[0],shape+'_mirror')
+			m.parent(shape+'_mirror',mirrorGroup)
+			m.createNode('decomposeMatrix',n= shape+'_mirror_DCM')
+			m.connectAttr(shape+'.worldMatrix[0]',shape+'_mirror_DCM.inputMatrix')
+			m.connectAttr(shape+'_mirror_DCM.outputTranslate',shape+'_mirror.t')
+			m.connectAttr(shape+'_mirror_DCM.outputRotate',shape+'_mirror.r')
+			m.connectAttr(shape+'_mirror_DCM.outputScale',shape+'_mirror.s')
+
+			if type == 'nurbsSurface':
+				m.connectAttr(shape+'Shape.worldSpace[0]',shape+'_mirrorShape.create')
+			if type == 'mesh':
+				m.connectAttr(shape+'Shape.outMesh',shape+'_mirrorShape.inMesh')
+
+			shader = m.listConnections(shape+'Shape',type='shadingEngine')[0].replace('_SG','')
+			m.select(shape+'_mirror')
+			
+			m.sets(e=True,forceElement=shader+'_SG')
+		
+
+
+		
+
+
+
+	def component(self,comp,**kwargs):
+		#kwargs include:
+		#
+		# - position -> pos=
+		# - scale
+		# - color
+		# - parent -> parent=
+		# - parentSpace -> ps= 
+		# - iterator -> i=
+		# - lock -> lock=
+
+		if 'i' in kwargs:
+			name = self.type+'_'+self.i+'_'+str(kwargs['i'])+'_'
+			if 'iSub' in kwargs:
+				name = self.type+'_'+self.i+'_'+comp+'_'+str(kwargs['i'])+'_'+str(kwargs['iSub'])+'_'
+		else:		
+			name = self.type+'_'+comp+'_'+self.i+'_'
+
+		if 'name' in kwargs:
+			name = kwargs['name']
+
+		if comp == 'disc':
+			comp = m.polyCylinder(n=name,ax=[1,0,0],h=0.3)
+
+		if comp == 'sphere':
+			comp = m.sphere(n=name)
+
+		if comp == 'footprint':
+			comp = m.polyCube(name=name,d=5,h=0.2,sz=4)
+			m.scale(2,1,1,name+'.vtx[4:5]',name+'.vtx[18:19]')
+			m.scale(1.5,1,1,name+'.vtx[8:9]',name+'.vtx[14:15]')
+			m.move (-.5, name+'.vtx[6:9]',name+'.vtx[14:17]',z=True,r=True)
+
+		if comp[1]:
+			m.connectAttr(self.group+'.objectScale',comp[1]+'.radius')
+
+		if 'pos' in kwargs:
+			p = kwargs['pos']
+			m.setAttr(comp[0]+'.t',p[0],p[1],p[2])
+
+		if 'parent' in kwargs:
+			m.parent(comp[0],kwargs['parent'])
+
+		if 'ps' in kwargs:
+			if 'ps':
+				meTools.meParent(comp[0])
+
+		if 'lock' in kwargs:
+			if kwargs['lock'] == 'all':
+				attrs = m.listAttr(comp[0],l=True)
+				if attrs:
+					for ea in attrs:					
+							m.setAttr(comp[0]+'.'+ea,l=True)
+			else:
+				m.setAttr(comp[0]+'.'+kwargs['lock'],l=True)
+
+		if 'color' in kwargs:
+			colorTgt = comp[0]
+			m.sets(e=True,forceElement='template_'+kwargs['color']+'_SG')
+
+
+		if 'ib' in kwargs:
+			self.shapes.insert(kwargs['ib'],comp[0])
+		else:
+			self.shapes.append(comp[0])
+
+		if 'secondary' not in kwargs:
+			self.primary.append(comp[0])
+
+		return comp[0]
+
+	def getIncrement(self,target,*args):
+		allObjects = m.ls(typ='transform')
+		i = 0
+		for obj in allObjects:
+			if target in obj:
+					if '_Space' not in obj:
+						i += 1					
+
+		return i
+	
+def connectRigs(mo,*args):
+	if args:
+		sel= args[0]
+	else:
+		sel = m.ls(sl=True)
+	
+	try:
+		tgtTopNode = m.listRelatives(sel[1],c=False,p=True,f=True)[0].split('|')[1]
+	except:
+		tgtTopNode = sel[1]
+	
+	m.delete(m.pointConstraint(sel[0],tgtTopNode,mo=mo))
+	meTools.meParent(tgtTopNode)
+	m.parentConstraint(sel[0],tgtTopNode+'_Space',mo=True)	
+	m.setAttr(tgtTopNode+'Shape.overrideColor',20)
+
+	topShape = tgtTopNode.replace('_grp','')+'Start'
+
+	self = getFromItem(sel[1],type='obj')
+	self.connectedTo = sel[0]
+
+	if mo:
+		surf = rigObj.connectComponents('',[[sel[0],topShape]])		
+		if 'mirror' in self.extraInfo:
+			self.mirrorRig(connection=surf)
+
+	else:
+		m.parent(tgtTopNode+'Shape',sel[0],r=True,s=True)
+		if not m.objExists(sel[0]+'.objectScale'):
+			m.addAttr(sel[0],ln='objectScale',at='double',min=0,max=2,dv=1,k=True)
+
+
+
+		m.connectAttr(sel[0]+'.objectScale',tgtTopNode+'.objectScale')
+		
+		
+		m.hide(topShape+'Shape')
+		self.keepRoot = False
+
+	
+
+
+def getFromItem(item,**kwargs):
+	returnObj = None
+
+	if 'type' in kwargs:		
+		for ro in rigObj.objDict:
+			obj = rigObj.objDict[ro]['obj']	
+
+			for shape in obj.shapes:
+				if item == shape:
+					returnObj = obj
+
+			if kwargs['type'] == 'joint':
+				joints = convertToJoint(obj,build=False)
+				if item in obj.shapes:
+					index = obj.shapes.index(item)
+					returnObj = joints[index]
+
+	return returnObj
+	
+
+def disconnectRigs():
+	pass
+
+def convertToSkel(**kwargs):
+	
+
+	parentDeferred = []
+
+
+	#list all the base nodes, find the 'root' node, which has no incoming connections.  If there is more than one node without
+	#incoming connections, error out.
+	cleanup = []
+	for ro in rigObj.objDict:
+		obj = rigObj.objDict[ro]['obj']	
+		name = rigObj.objDict[ro]['name']
+		print 'now doing '+name
+		#if not obj.composite:
+		joints = []
+		origJoints = []
+
+		prev = ''
+		
+		obj.joints = convertToJoint(obj,build=True)		
+
+		if 'mirror' not in obj.extraInfo:
+			sides = ['']
+		else:
+			sides = obj.extraInfo['mirror']
+		
+		if 'parent' in obj.extraInfo:
+			if obj.extraInfo['parent']:
+				sides = obj.extraInfo['parent'].sides
+
+		for id in sides:
+			test = False
+			aimFlip = 1
+			if len(sides) > 1:
+				if id == sides[1]:
+					obj.joints = meTools.listSubstitute(obj.joints,sides)
+					aimFlip = -1
+					m.parent(obj.upLoc,obj.shapes[0]+'_mirror',r=True)
+					m.move(-10,obj.upLoc,y=True,os=True,r=True)
+					#m.error()
+
+			for i in range(len(obj.joints)):
+				flip = 1
+
+				if m.getAttr(obj.shapes[i]+'.tz') > 0:
+					flip = -1
+								
+				#algin joints.  TBD: improve alignment method
+				if 0 < i < (len(obj.joints)-1):					
+
+					#try an aim constraint 
+					m.delete(m.aimConstraint(obj.joints[i+1],obj.joints[i],aimVector=(1*aimFlip,0,0),upVector=(0,1,0),worldUpType='objectRotation',wuo=prevJoint))
+					
+					#if joint is flipped, move upLoc to joint's up vector, reConstrain
+					if abs(m.getAttr(obj.joints[i]+'.rx')) == 180:
+						#m.delete(m.aimConstraint(obj.joints[i+1],obj.joints[i],aimVector=(1*aimFlip,0,0),upVector=(0,-1,0),worldUpType='objectRotation',wuo=prevJoint))
+						m.parent(obj.upLoc,obj.joints[i],r=True)
+						m.parent(obj.upLoc,w=True)
+						m.delete(m.aimConstraint(obj.joints[i+1],obj.joints[i],aimVector=(1*aimFlip,0,0),upVector=(0,-1,0),worldUpType='object',wuo=obj.upLoc))	
+
+						#if joint is still not aligned, try an aimConsraint with the previous joint as a z upVector (used for directional changes)
+						if abs(m.getAttr(obj.joints[i]+'.rx')) != 180 and m.getAttr(obj.joints[i]+'.rx') != 0:
+							m.delete(m.aimConstraint(obj.joints[i+1],obj.joints[i],aimVector=(1*aimFlip,0,0),upVector=(0,0,1),worldUpType='object',wuo=prevJoint))	
+
+							#if joint is still not aligned, try an aim constraint with the original settings
+							if abs(m.getAttr(obj.joints[i]+'.rx')) != 180 and m.getAttr(obj.joints[i]+'.rx') != 0:
+								m.delete(m.aimConstraint(obj.joints[i+1],obj.joints[i],aimVector=(1*aimFlip,0,0),upVector=(0,1,0),worldUpType='objectRotation',wuo=prevJoint))
+
+
+					m.parent(obj.joints[i],prevJoint)
+
+
+
+				else:
+					if obj.joints[i] == obj.joints[0]:
+						if len(obj.joints) > 1:
+							m.delete(m.aimConstraint(obj.joints[i+1],obj.joints[i],aimVector=(1*aimFlip,0,0),upVector=(0,1,0),worldUpType='object',wuo=obj.upLoc))
+
+					else:						
+						m.parent(obj.joints[-1],prevJoint)
+						m.setAttr(obj.joints[-1]+'.jo',0,0,0)
+			
+				m.makeIdentity(obj.joints[i],a=True,r=True,t=False,s=False,n=False)
+
+				prevJoint = obj.joints[i]	
+
+			if obj.connectedTo:			
+				mirr = False
+				#if 'mirror' in the connection name, then make sure the connJnt variable is corrected before getting parented to
+				if '_mirror' in obj.connectedTo:
+					mirr =True
+
+				srcObj = getFromItem(obj.connectedTo.replace('_mirror',''),type='obj')
+				shapeIndex = srcObj.shapes.index(obj.connectedTo.replace('_mirror',''))
+
+				if obj.keepRoot == False:
+					topJoint = 1
+
+				else:
+					topJoint = 0
+
+				#getFromItem returns the joint for a given shape, if the connection was originally to a mirror, replace the side
+				#id with the mirrored side
+
+				connJnt = getFromItem(obj.connectedTo,type='joint')
+				
+				if mirr:
+					connJnt = srcObj.joints[shapeIndex].replace(srcObj.sides[0],srcObj.sides[1])
+				if len(sides) >1 and len(srcObj.sides) > 1:
+					if id == sides[1]:
+						if mirr:
+							connJnt = srcObj.joints[shapeIndex].replace(srcObj.sides[1],srcObj.sides[0])
+						else:
+							connJnt = srcObj.joints[shapeIndex].replace(srcObj.sides[0],srcObj.sides[1])
+
+				# print 'parenting '+obj.joints[topJoint]
+				# print 'under '+connJnt
+
+				parentDeferred.append([obj.joints[topJoint],connJnt])
+
+			if len(sides) > 1:
+				if id == sides[1]:
+					obj.joints = meTools.listSubstitute(obj.joints,(sides[1],sides[0]))
+					cleanup.append(obj.upLoc)
+
+			cleanup.append(obj.group)
+			cleanup.append(obj.group+'_Space')
+			
+
+
+	for clean in cleanup:
+		if m.objExists(clean):
+			m.delete(clean)
+	
+	
+	for pd in parentDeferred:
+
+			if m.objExists(pd[1]+'_deleteMe'):
+				print pd[1]+'_deleteMe'
+				m.delete(m.parentConstraint(pd[1]+'_deleteMe',pd[1]))
+
+
+	for pd in parentDeferred:
+		m.parent(pd[0],pd[1])
+
+	
+
+	for joint in m.ls(typ='joint'):
+		if '_deleteMe' in joint:
+			m.delete(joint)
+
+
+def convertToJoint(obj,**kwargs):
+
+	#iterate through joints in the set.  This is a mess right now because both incremental and non-incremental setups are being 
+	#accounted for.  TO DO: organize this section for better readability.
+
+	jointSets = {	'Arm':{'isIterator':False,
+
+								'joints':['shoulder','elbow','wrist']},
+
+						'Leg':{'isIterator':False,
+
+								'joints':['hip','knee','ankle']},
+						
+						'Spine':{'isIterator':'spine',
+
+								'joints':['pelvis','spine']},
+
+						'Neck':{'isIterator':'neck',
+
+								'joints':['neck','head']},
+
+						'Foot':{'isIterator':False,
+
+								'joints':['ankle','heel','ball','toe']},
+
+						'Clavicle':{'isIterator':False,
+
+									'joints':['clavicle','shoulder']},
+
+						'Metacarpal': {'isIterator':'phal_~',
+									'joints':['meta_~','phal_~']},
+
+						'Phalange': {'isIterator':'phal_~',
+									'joints':['phal_~']},
+
+						'Hand':{'isIterator':False,
+								'joints':['wrist','palm']}
+
+						}
+
+	#if the number of joints in the specified joint set doesn't match the number of primary (sphere shape) joints in the jointSet
+	#index, error out.
+	name = obj.name
+	primaries = obj.shapes
+	joints = []		
+	id =''
+	if 'id' in obj.extraInfo:
+		id = obj.extraInfo['id']
+
+	if not jointSets[name]['isIterator']:
+		if jointSets[name]['isIterator'] != 'Complex':
+			if len(obj.primary) != len(jointSets[name]['joints']):
+				m.error('Incorrect number of joints for specified rig name')
+
+	if 'mirror' not in obj.extraInfo:
+		sides = ['']
+	else:
+		sides = obj.extraInfo['mirror']
+	
+	if 'parent' in obj.extraInfo:
+		if obj.extraInfo['parent']:
+			sides = obj.extraInfo['parent'].sides
+
+
+
+	for id in sides:
+		i = 0
+		k = 0
+		j = 0
+		pr = 0
+		l= 0
+		flip = 1
+
+		if len(sides) > 1:
+			if id == sides[1]: 
+				flip = -1
+		j = 0		
+		for ea in obj.shapes:
+			m.select(cl=True)
+			p = m.xform(ea,q=True,t=True,ws=True)
+			
+			if ea in obj.primary:
+				currentJoint = 'base_'+jointSets[name]['joints'][k]+id				
+				
+				if jointSets[name]['isIterator']:				
+					if len(ea.split('_') ) == 5 or jointSets[name]['isIterator'] in jointSets[name]['joints'][l]:
+						currentJoint = 'base_'+jointSets[name]['joints'][k-1]+id+'_'+str(j)
+						j+=1
+					else:
+						l+=1
+				else:
+					k += 1
+					j = 0
+
+				pr +=1
+
+			else:
+				if 'disc' in ea:
+					rollNum = ea.split('_')[-2]
+					currentJoint = 'base_'+jointSets[name]['joints'][k-1]+id+'_Roll_'+str(j)
+				
+				j+=1
+
+			if '_~' in currentJoint:
+				currentJoint = currentJoint.replace('~',obj.extraInfo['procedural'])
+
+			if ea ==  obj.shapes[0] and not obj.keepRoot:
+				currentJoint += '_deleteMe'
+
+			if kwargs['build']:
+				m.joint(n=currentJoint,p=(p[0]*flip,p[1],p[2]))
+
+			if id == sides[0]:				
+				joints.append(currentJoint)		
+			prevJoint = currentJoint
+			i+=1
+
+	return joints
+
+	
+
+
+def exportTemplate():
+	pass
+

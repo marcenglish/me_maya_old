@@ -1,0 +1,44 @@
+{
+    "curveVis": [
+        "curveVis.png", 
+        "cTools.anim.curveVis()", 
+        "This toggles visibility of control curves."
+    ], 
+    "curveAll": [
+        "curveAll.png", 
+        "cTools.anim.curveAll()", 
+        "This selects all control curves."
+    ], 
+    "graphEditor": [
+        "graph.png", 
+        "cTools.anim.graph()", 
+        "This displays the graph editor."
+    ], 
+    "swapLR": [
+        "LR.png", 
+        "cTools.anim.swapLR()", 
+        "This switches your selection between left and right sides."
+    ],     
+    "switchSpace": [
+        "space.png", 
+        "cTools.anim.ssWindow()", 
+        "This switches IK parentSpace while maintaining position."
+    ],     
+
+    "sceneEdit": [
+        "sceneEdit.png", 
+        "obj__sceneEdit", 
+        "Edit elements in your scene (only adds for now)."
+    ],     
+
+    "importBaseSkel": [
+        "", 
+        "cTools.rigging.importBaseSkel()", 
+        "Imports the base skeleton for the character."
+    ],
+    "projectSetup": [
+        "projectSetup.png", 
+        "PJ_UI = cTools.admin.projectSetupUI(CT_Obj)", 
+        "This will setup new projects."
+    ]
+}

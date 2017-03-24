@@ -1,0 +1,39 @@
+Setting Up CloudAssets at Home as a user.
+
+Installing CloudTools will give you a Maya tab that lets you access the tools I’ve written for your project.
+
+Install the toolset by copying and pasting the following into a Python box in the maya script editor:
+
+#start here
+import maya.cmds as m
+import sys
+import os
+filename = m.fileDialog2(fileMode=1, caption="INIT.txt")[0]
+path = filename.replace("CT_Public/INIT.txt","")
+sys.path.append(path+"CT_Public/")
+import cTools.setup
+reload( cTools.setup)
+if m.window("resetShelf_WIN",q=True,ex=True):
+	m.deleteUI("resetShelf_WIN")
+m.window("resetShelf_WIN",height = 50,width=150)
+m.columnLayout(adjustableColumn=True)
+m.button("resetShelf",c="CT_Obj = cTools.setup.sceneSetup('"+path+"');m.deleteUI(('resetShelf_WIN'))")
+m.showWindow("resetShelf_WIN")
+#end here
+
+This should prompt you to open a file.  Find the INIT.txt file (it’s in the ‘Public’ folder, which should be visible once you click on the google drive shortcut on your desktop) and click ‘open’.
+
+If everything worked, you should get a confirmation dialog box saying so, and a new tab titled ‘CloudTools’ should appear.  If at anytime the scripts stop working, redo the above procedure to reinstall the shelf.
+
+Configuring your scene:
+
+Click on the little ID card icon on the left side of the shelf to setup your scene.  It will prompt you for a role and a shot.  Enter these when prompted and the logo should turn green.  Once it does, you’re all setup and tools that I develop will know what you are working on and what shot you’re in.
+
+
+
+Incremental save:
+
+In order to save increments, first setup your scene (see above).  Once this is done, just click on the disk logo and enter a comment.  Everytime you click ‘save’, the tool saves two files.  One ‘root’ file in the Anim folder, and a commented increment in the ‘Anim/Wrk’ folder.
+
+
+

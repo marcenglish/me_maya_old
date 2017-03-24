@@ -1,0 +1,20 @@
+proc meAnimControlUI(){
+    string $windowName = "meAnimControl";
+    string $windowTitle = "meAnimControl v 1.0.2";
+    if(`window -exists $windowName`)
+        deleteUI $windowName;
+    if(`windowPref -exists $windowName`)
+        windowPref -remove $windowName;
+
+window
+    -title $windowTitle
+    -mb 1
+    -te 164
+    -le 1000
+     $windowName;
+
+    menu -l "Edit";
+        setParent -m ..;
+
+}
+meAnimControlUI();

@@ -1,0 +1,32 @@
+//meMatch Skel - select source, and then dest skel
+
+//get both skel prefixes
+{
+string $sel[]  = `ls -sl`;
+select -hi $sel[0];
+string $joints[] =`ls -sl`;
+string $prefix = `substitute $sel[0] $sel[1] ""`;
+
+for ($ea in $joints){
+if (`nodeType $ea` == "joint"){
+print ($prefix+$ea+" is a joint\n");
+setAttr ($prefix+$ea+".tx") `getAttr ($ea+".tx")`;
+setAttr ($prefix+$ea+".ty") `getAttr ($ea+".ty")`;
+setAttr ($prefix+$ea+".tz") `getAttr ($ea+".tz")`;
+setAttr ($prefix+$ea+".rx") `getAttr ($ea+".rx")`;
+setAttr ($prefix+$ea+".ry") `getAttr ($ea+".ry")`;
+setAttr ($prefix+$ea+".rz") `getAttr ($ea+".rz")`;
+setAttr ($prefix+$ea+".sx") `getAttr ($ea+".sx")`;
+setAttr ($prefix+$ea+".sy") `getAttr ($ea+".sy")`;
+setAttr ($prefix+$ea+".sz") `getAttr ($ea+".sz")`;
+setAttr ($prefix+$ea+".jointOrientX") `getAttr ($ea+".jointOrientX")`;
+setAttr ($prefix+$ea+".jointOrientY") `getAttr ($ea+".jointOrientY")`;
+setAttr ($prefix+$ea+".jointOrientZ") `getAttr ($ea+".jointOrientZ")`;
+}else{
+print ($ea+" is not a joint\n");
+}
+
+}
+print ("prefix is "+$prefix);
+
+}

@@ -1,0 +1,36 @@
+Setting Up CloudAssets at Home as admin:
+
+Note - This has only been tested on a Windows box with Dropbox and Google Drive so far, so installation notes are based on one of these setups.
+
+1 - Download the desktop app for the cloud service.  Dropbox and Google Drive both have one.  This app will create a syncing mirror of your cloud storage in your folder sructure.
+
+2 - Place 'CloudTools' in this folder.
+
+3 - Add your workstation login next to 'admin=' in the CloudTools/CT_Admin/config.txt
+
+4 - Install the toolset by executing the following in maya:
+
+#start here
+import maya.cmds as m
+import sys
+import os
+						
+filename = m.fileDialog2(fileMode=1, caption="INIT.txt")[0]
+path = filename.replace("CT_Public/INIT.txt","")
+sys.path.append(path+"CT_Public/")
+import cTools.setup
+reload( cTools.setup)
+if m.window("resetShelf_WIN",q=True,ex=True):
+	m.deleteUI("resetShelf_WIN")
+m.window("resetShelf_WIN",height = 50,width=150)
+m.columnLayout(adjustableColumn=True)
+m.button("resetShelf",c="CT_Obj = cTools.setup.sceneSetup('"+path+"');m.deleteUI(('resetShelf_WIN'))")
+m.showWindow("resetShelf_WIN")
+#end here
+
+
+5 - Run projectSetup to create the folder structure for your project.
+
+6 - Click on the reload button (Cloud icon with a refresh arrow) to reload the CloudTools object.
+
+7 - You're done!  You can use the scene setup tool (ID card icon) to setup your maya environment and start working.
